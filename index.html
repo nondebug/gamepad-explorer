@@ -1,0 +1,210 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Gamepad Explorer</title>
+  <script type="text/javascript">
+
+let connectedGamepads = {};
+let selectedGamepadIndex = null;
+let intervalId;
+
+const gamepadSelectionChanged = () => {
+  let select = document.getElementById('gamepadSelect');
+  console.log('gamepadSelectionChanged ' + select.value);
+
+  selectedGamepadIndex = select.value;
+};
+
+const selectGamepad = padIndex => {
+  if (connectedGamepads[padIndex]) {
+    selectedGamepadIndex = padIndex;
+  } else {
+    selectedGamepadIndex = null;
+    // No gamepad at that index. Select the first non-null gamepad.
+    for (let g in connectedGamepads) {
+      if (g !== null) {
+        selectedGamepadIndex = g.index;
+        break;
+      }
+    }
+  }
+
+  if (selectedGamepadIndex !== null) {
+    console.log('selecting ' + selectedGamepadIndex);
+    let select = document.getElementById('gamepadSelect');
+    select.value = selectedGamepadIndex;
+  } else {
+    console.log('null selection');
+  }
+}
+
+const updateGamepadMenu = () => {
+  let select = document.getElementById('gamepadSelect');
+  let value = select.value;
+  for (let i = select.options.length - 1; i >= 0; --i)
+    select.options[i] = null;
+
+  let anyGamepad = false
+  select.value = 0;
+  selectedGamepadIndex = 0;
+  for (let index in connectedGamepads) {
+    const gamepad = connectedGamepads[index];
+    const opt = document.createElement('option');
+    opt.value = gamepad.index;
+    opt.innerHTML = gamepad.id;
+    select.appendChild(opt);
+    anyGamepad = true;
+    if (value == gamepad.index) {
+      select.value = value;
+      selectedGamepadIndex = value;
+    }
+  }
+  if (!anyGamepad) {
+    const opt = document.createElement('option');
+    opt.value = 0;
+    opt.innerHTML = 'No connected gamepads';
+    select.appendChild(opt);
+  }
+}
+
+const kButtonNames = [
+  'Primary Button (bottom button in right cluster)',
+  'Secondary Button (right button in right cluster)',
+  'Tertiary Button (left button in right cluster)',
+  'Quaternary Button (top button in right cluster)',
+  'Left Shoulder Button (top left front button)',
+  'Right Shoulder Button (top right front button)',
+  'Left Trigger Button (bottom left front button)',
+  'Right Trigger Button (bottom right front button)',
+  'Back/Select Button (left button in center cluster)',
+  'Start Button (right button in center cluster)',
+  'Left Stick Pressed Button',
+  'Right Stick Pressed Button',
+  'D-pad Up (top button in left cluster)',
+  'D-pad Down (bottom button in left cluster)',
+  'D-pad Left (left button in left cluster)',
+  'D-pad Right (right button in left cluster)',
+  'Home (center button in center cluster)'
+];
+
+const kAxisNames = [
+  'Left Stick X-axis (-left,+right)',
+  'Left Stick Y-axis (-up,+down)',
+  'Right Stick X-axis (-left,+right)',
+  'Right Stick Y-axis (-up,+down)'
+];
+
+const buttonToString = (index, button) => {
+  let indexStr = index.toString();
+  if (indexStr.length == 1)
+    indexStr = ' ' + indexStr;
+  return 'buttons[' + indexStr + ']: ' + button.value.toFixed(2) +
+      (button.touched ? ' touched' : '        ') +
+      (button.pressed ? ' pressed' : '        ') + ' |' +
+      (index < kButtonNames.length ? ' ' + kButtonNames[index] : '');
+}
+
+const axisToString = (index, value) => {
+  let indexStr = index.toString();
+  if (indexStr.length == 1)
+    indexStr = ' ' + indexStr;
+  return 'axes[' + indexStr + ']:   ' + (value >= 0 ? ' ' : '-') + Math.abs(value).toFixed(2) + '                 |' +
+      (index < kAxisNames.length ? ' ' + kAxisNames[index] : '');
+};
+
+const testVibration = () => {
+  const selectedGamepad = connectedGamepads[selectedGamepadIndex];
+  if (!selectedGamepad)
+    return;
+
+  selectedGamepad.vibrationActuator.playEffect(
+      'dual-rumble',
+      {strongMagnitude:1.0, weakMagnitude:1.0, duration:1000});
+};
+
+const updateGamepadInfo = () => {
+  let vibrateButton = document.getElementById('testVibration');
+  let textarea = document.getElementById('gamepadInfo');
+  const selectedGamepad = connectedGamepads[selectedGamepadIndex];
+  if (!selectedGamepad) {
+    vibrateButton.disabled = true;
+    textarea.innerHTML = 'No device selected';
+    return;
+  }
+
+  vibrateButton.disabled = !selectedGamepad.vibrationActuator;
+
+  let gamepadInfo =
+      'id: ' + selectedGamepad.id + '\n' +
+      'index: ' + selectedGamepad.index + '\n' +
+      'connected: ' + selectedGamepad.connected + '\n' +
+      'timestamp: ' + selectedGamepad.timestamp + '\n' +
+      'mapping: ' + selectedGamepad.mapping;
+  if (selectedGamepad.vibrationActuator) {
+    gamepadInfo += '\n' +
+        'vibrationActuator.type: ' + selectedGamepad.vibrationActuator.type;
+  }
+  for (let i = 0; i < selectedGamepad.buttons.length; ++i)
+    gamepadInfo += '\n' + buttonToString(i, selectedGamepad.buttons[i]);
+  for (let i = 0; i < selectedGamepad.axes.length; ++i)
+    gamepadInfo += '\n' + axisToString(i, selectedGamepad.axes[i]);
+  textarea.innerHTML = gamepadInfo;
+
+  updateGamepadMenu();
+}
+
+const updateAllGamepads = () => {
+  const pads = navigator.getGamepads();
+  for (let i = 0; i < pads.length; ++i)
+    updateGamepad(i, pads[i]);
+}
+
+const updateGamepad = (index, gamepad) => {
+  let otherGamepad = connectedGamepads[index];
+  if (!gamepad) {
+    if (otherGamepad)
+      removeGamepad(otherGamepad);
+    return;
+  }
+
+  connectedGamepads[gamepad.index] = gamepad;
+  if (selectedGamepadIndex === null)
+    selectGamepad(gamepad.index);
+
+  updateGamepadMenu();
+};
+
+const removeGamepad = gamepad => {
+  delete connectedGamepads[gamepad.index];
+  updateGamepadMenu();
+  if (selectedGamepadIndex == gamepad.index)
+    selectGamepad(0);
+};
+
+const onRequestAnimationFrame = () => {
+  updateGamepadMenu();
+  updateGamepadInfo();
+  window.requestAnimationFrame(onRequestAnimationFrame);
+};
+
+window.onload = () => {
+  updateAllGamepads();
+
+  intervalId = setInterval(updateAllGamepads, 100);
+  onRequestAnimationFrame();
+
+  window.addEventListener('gamepadconnected', e => { updateGamepad(e.gamepad.index, e.gamepad); });
+  window.addEventListener('gamepaddisconnected', e => { removeGamepad(e.gamepad); });
+};
+
+  </script>
+</head>
+<body>
+<h1>Gamepad Explorer<h1>
+<button id="testVibration" onclick="testVibration()">Vibrate</button>
+<select id="gamepadSelect" oninput="gamepadSelectionChanged()"></select>
+<br />
+<textarea id="gamepadInfo" cols="100" rows="50" disabled></textarea>
+</body>
+</html>
