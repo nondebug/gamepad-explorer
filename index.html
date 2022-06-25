@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -123,17 +122,33 @@ const testVibration = () => {
       {strongMagnitude:1.0, weakMagnitude:1.0, duration:1000});
 };
 
+const testTriggerRumble = () => {
+  const selectedGamepad = connectedGamepads[selectedGamepadIndex];
+  if (!selectedGamepad)
+    return;
+
+  selectedGamepad.vibrationActuator.playEffect(
+      'trigger-rumble',
+      {leftTrigger:1.0, rightTrigger:1.0, duration:100});
+};
+
 const updateGamepadInfo = () => {
   let vibrateButton = document.getElementById('testVibration');
+  let triggerRumbleButton = document.getElementById('testTriggerRumble');
   let textarea = document.getElementById('gamepadInfo');
   const selectedGamepad = connectedGamepads[selectedGamepadIndex];
   if (!selectedGamepad) {
     vibrateButton.disabled = true;
+    triggerRumbleButton.disabled = true;
     textarea.innerHTML = 'No device selected';
     return;
   }
 
-  vibrateButton.disabled = !selectedGamepad.vibrationActuator;
+  vibrateButton.disabled = selectedGamepad.vibrationActuator === undefined;
+  triggerRumbleButton.disabled =
+      selectedGamepad.vibrationActuator === undefined ||
+      selectedGamepad.vibrationActuator.canPlay === undefined ||
+      !selectedGamepad.vibrationActuator.canPlay('trigger-rumble');
 
   let gamepadInfo =
       'id: ' + selectedGamepad.id + '\n' +
@@ -144,14 +159,25 @@ const updateGamepadInfo = () => {
   if (selectedGamepad.vibrationActuator) {
     gamepadInfo += '\n' +
         'vibrationActuator.type: ' + selectedGamepad.vibrationActuator.type;
+    if (selectedGamepad.vibrationActuator.canPlay === undefined) {
+      gamepadInfo += '\n' +
+          'vibrationActuator.canPlay: undefined';
+    } else {
+      let effects = []
+      if (selectedGamepad.vibrationActuator.canPlay('dual-rumble'))
+        effects.push('dual-rumble');
+      if (selectedGamepad.vibrationActuator.canPlay('trigger-rumble'))
+        effects.push('trigger-rumble');
+
+      gamepadInfo += '\n' +
+          'vibrationActuator.canPlay: ' + effects.join(', ');
+    }
   }
   for (let i = 0; i < selectedGamepad.buttons.length; ++i)
     gamepadInfo += '\n' + buttonToString(i, selectedGamepad.buttons[i]);
   for (let i = 0; i < selectedGamepad.axes.length; ++i)
     gamepadInfo += '\n' + axisToString(i, selectedGamepad.axes[i]);
   textarea.innerHTML = gamepadInfo;
-
-  updateGamepadMenu();
 }
 
 const updateAllGamepads = () => {
@@ -171,8 +197,6 @@ const updateGamepad = (index, gamepad) => {
   connectedGamepads[gamepad.index] = gamepad;
   if (selectedGamepadIndex === null)
     selectGamepad(gamepad.index);
-
-  updateGamepadMenu();
 };
 
 const removeGamepad = gamepad => {
@@ -183,18 +207,21 @@ const removeGamepad = gamepad => {
 };
 
 const onRequestAnimationFrame = () => {
-  updateGamepadMenu();
   updateGamepadInfo();
   window.requestAnimationFrame(onRequestAnimationFrame);
 };
 
 window.onload = () => {
   updateAllGamepads();
+  updateGamepadMenu();
 
   intervalId = setInterval(updateAllGamepads, 100);
   onRequestAnimationFrame();
 
-  window.addEventListener('gamepadconnected', e => { updateGamepad(e.gamepad.index, e.gamepad); });
+  window.addEventListener('gamepadconnected', e => {
+      updateGamepad(e.gamepad.index, e.gamepad);
+      updateGamepadMenu();
+  });
   window.addEventListener('gamepaddisconnected', e => { removeGamepad(e.gamepad); });
 };
 
@@ -202,7 +229,8 @@ window.onload = () => {
 </head>
 <body>
 <h1>Gamepad Explorer<h1>
-<button id="testVibration" onclick="testVibration()">Vibrate</button>
+<button id="testVibration" onclick="testVibration()">Rumble effect</button>
+<button id="testTriggerRumble" onclick="testTriggerRumble()">Trigger effect</button>
 <select id="gamepadSelect" oninput="gamepadSelectionChanged()"></select>
 <br />
 <textarea id="gamepadInfo" cols="100" rows="50" disabled></textarea>
